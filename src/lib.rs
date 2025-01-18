@@ -1,14 +1,17 @@
 use std::{ffi::{c_char, c_uint, c_void}, mem::MaybeUninit, ptr, slice};
 
-use color::XRGB8888;
+use color::{Color, XRGB8888};
 use framebuffer::Framebuffer;
+use texture::Texture;
 
 mod color;
 mod framebuffer;
+mod texture;
 
 mod retro;
 
 static mut FRAME_BUF: Option<Framebuffer> = None;
+static mut TEXTURE: Option<Texture> = None;
 
 static mut LOG_CB: Option<retro::log_printf_t> = None;
 
@@ -63,6 +66,9 @@ static mut MOUSE_REL_Y: isize = 0;
 pub extern "system" fn retro_init() {
     unsafe {
         FRAME_BUF = Some(Framebuffer::new(320, 240));
+        TEXTURE = Some(Texture::new(&[
+            Color::BLUE; 256
+        ], 16, 16));
     }
 }
 
@@ -70,6 +76,7 @@ pub extern "system" fn retro_init() {
 pub extern "system" fn retro_deinit() {
     unsafe {
         FRAME_BUF = None;
+        TEXTURE = None;
     }
 }
 
@@ -201,6 +208,8 @@ fn render_checkered() {
                 buf[y][x] = XRGB8888::BLUE;
             }
         }
+
+        buf.draw(TEXTURE.as_ref().unwrap(), 2, 0);
 
         VIDEO_CB(buf.as_ptr() as _, buf.width() as _, buf.height() as _, buf.pitch());
     }

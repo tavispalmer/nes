@@ -1,10 +1,10 @@
 use core::slice;
 use std::{alloc::{alloc, alloc_zeroed, dealloc, Layout}, mem, ops::{Index, IndexMut}, ptr::NonNull, slice::SliceIndex};
 
-use crate::color::XRGB8888;
+use crate::{color::XRGB8888, texture::Texture};
 
 pub struct Framebuffer {
-    framebuffer: NonNull<[XRGB8888]>,
+    framebuffer: NonNull<XRGB8888>,
     width: usize,
     height: usize,
 }
@@ -15,10 +15,10 @@ impl Framebuffer {
         Self {
             framebuffer: unsafe {
                 // use NonNull instead of Box so we can set the alignment
-                NonNull::new(slice::from_raw_parts_mut(alloc_zeroed(Layout::from_size_align(
+                NonNull::new(alloc_zeroed(Layout::from_size_align(
                     width.next_power_of_two() * height * size_of::<XRGB8888>(),
                     width.next_power_of_two() * size_of::<XRGB8888>()
-                ).unwrap()) as *mut XRGB8888, width.next_power_of_two() * height)).unwrap()
+                ).unwrap()) as *mut XRGB8888).unwrap()
             },
             width,
             height,
@@ -44,6 +44,24 @@ impl Framebuffer {
     pub const fn as_mut_ptr(&mut self) -> *mut XRGB8888 {
         self.framebuffer.as_ptr() as _
     }
+
+    pub fn draw(&mut self, texture: &Texture, x: usize, y: usize) {
+        for y_off in 0..(texture.height()).min(self.height() - y) {
+            for x_off in 0..(texture.width()).min(self.width() - x) {
+                // simple blending
+                let src = &texture[y_off][x_off];
+                let dst = &mut self[y + y_off][x + x_off];
+                let src_mul = src.a() as u16;
+                let dst_mul = 0xff - src_mul;
+            
+                *dst = XRGB8888::new(
+                    ((dst.r() as u16 * dst_mul + src.r() as u16 * src_mul) / 0xff) as u8,
+                    ((dst.g() as u16 * dst_mul + src.g() as u16 * src_mul) / 0xff) as u8,
+                    ((dst.b() as u16 * dst_mul + src.b() as u16 * src_mul) / 0xff) as u8,
+                );
+            }
+        }
+    }
 }
 
 impl Drop for Framebuffer {
@@ -66,7 +84,10 @@ impl Index<usize> for Framebuffer {
     fn index(&self, index: usize) -> &Self::Output {
         let pitch = self.width.next_power_of_two();
         unsafe {
-            &self.framebuffer.as_ref()[(index*pitch)..((index+1)*pitch)]
+            &slice::from_raw_parts(
+                self.framebuffer.as_ptr(),
+                self.width.next_power_of_two() * self.height
+            )[(index*pitch)..((index+1)*pitch)]
         }
     }
 }
@@ -76,7 +97,10 @@ impl IndexMut<usize> for Framebuffer {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let pitch = self.width.next_power_of_two();
         unsafe {
-            &mut self.framebuffer.as_mut()[(index*pitch)..((index+1)*pitch)]
+            &mut slice::from_raw_parts_mut(
+                self.framebuffer.as_ptr(),
+                self.width.next_power_of_two() * self.height
+            )[(index*pitch)..((index+1)*pitch)]
         }
     }
 }

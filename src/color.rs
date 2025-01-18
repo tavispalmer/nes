@@ -1,8 +1,29 @@
+use std::ops::Add;
+
 // RGBA
 #[derive(Debug, Copy, Clone)]
 pub struct Color(u32);
 
 impl Color {
+    pub const WHITE: Color = Color::new(0xff, 0xff, 0xff);
+    pub const SILVER: Color = Color::new(0xc0, 0xc0, 0xc0);
+    pub const GRAY: Color = Color::new(0x80, 0x80, 0x80);
+    pub const BLACK: Color = Color::new(0x00, 0x00, 0x00);
+    pub const RED: Color = Color::new(0xff, 0x00, 0x00);
+    pub const MAROON: Color = Color::new(0x80, 0x00, 0x00);
+    pub const YELLOW: Color = Color::new(0xff, 0xff, 0x00);
+    pub const OLIVE: Color = Color::new(0x80, 0x80, 0x00);
+    pub const LIME: Color = Color::new(0x00, 0xff, 0x00);
+    pub const GREEN: Color = Color::new(0x00, 0x80, 0x00);
+    pub const AQUA: Color = Color::new(0x00, 0xff, 0xff);
+    pub const TEAL: Color = Color::new(0x00, 0x80, 0x80);
+    pub const BLUE: Color = Color::new(0x00, 0x00, 0x0ff);
+    pub const NAVY: Color = Color::new(0x00, 0x00, 0x80);
+    pub const FUCHSIA: Color = Color::new(0xff, 0x00, 0xff);
+    pub const PURPLE: Color = Color::new(0x80, 0x00, 0x80);
+
+    pub const TRANSPARENT: Color = Color::with_alpha(0x00, 0x00, 0x00, 0x00);
+
     #[inline]
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self::with_alpha(r, g, b, 0xff)
