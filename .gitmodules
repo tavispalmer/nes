@@ -1,0 +1,3 @@
+[submodule "notsofatso"]
+	path = notsofatso
+	url = https://github.com/tavispalmer/notsofatso.git

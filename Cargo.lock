@@ -5,3 +5,11 @@ version = 4
 [[package]]
 name = "gfx"
 version = "0.1.0"
+source = "git+https://github.com/tavispalmer/gfx.git#5f1eb3c62c5d3ab8a999c59cc0c9fe6d9e04995d"
+
+[[package]]
+name = "nes"
+version = "0.1.0"
+dependencies = [
+ "gfx",
+]

@@ -1,10 +1,11 @@
 [package]
-name = "gfx"
+name = "nes"
 version = "0.1.0"
 edition = "2021"
 
 [lib]
-name = "gfx"
-crate-type = ["cdylib"]
+name = "nes"
+crate-type = ["lib", "cdylib"]
 
 [dependencies]
+gfx = { git = "https://github.com/tavispalmer/gfx.git" }

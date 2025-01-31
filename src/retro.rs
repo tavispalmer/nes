@@ -6,7 +6,14 @@ pub const API_VERSION: c_uint = 1;
 
 pub const DEVICE_JOYPAD: c_uint = 1;
 
+pub const DEVICE_ID_JOYPAD_B: c_uint = 0;
+pub const DEVICE_ID_JOYPAD_Y: c_uint = 1;
+pub const DEVICE_ID_JOYPAD_SELECT: c_uint = 2;
+pub const DEVICE_ID_JOYPAD_START: c_uint = 3;
 pub const DEVICE_ID_JOYPAD_UP: c_uint = 4;
+pub const DEVICE_ID_JOYPAD_DOWN: c_uint = 5;
+pub const DEVICE_ID_JOYPAD_LEFT: c_uint = 6;
+pub const DEVICE_ID_JOYPAD_RIGHT: c_uint = 7;
 
 pub const ENVIRONMENT_SET_PIXEL_FORMAT: c_uint = 10;
 
