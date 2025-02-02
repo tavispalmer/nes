@@ -7,7 +7,6 @@ use ppu::Ppu;
 
 mod retro;
 mod nsf;
-
 mod ffi;
 
 pub mod apu;
@@ -28,16 +27,16 @@ pub trait Controller {
     fn right(&self) -> bool;
 }
 
-pub struct Nes<'a> {
-    mem: Box<Memory<'a>>,
+pub struct Nes<C: Controller> {
+    mem: Box<Memory<C>>,
     apu: Box<Apu>,
-    cpu: Box<Cpu<'a>>,
+    cpu: Box<Cpu<C>>,
     ppu: Box<Ppu>,
 
     cycles: Box<Cell<usize>>,
 }
 
-impl<'a> Nes<'a> {
+impl<C: Controller> Nes<C> {
     pub fn load_from_memory(game: &[u8]) -> Option<Self> {
         // todo: check ines header
         let hdr = &game[..0x10];
@@ -93,9 +92,7 @@ impl<'a> Nes<'a> {
             cycles,
         })
     }
-}
 
-impl Nes<'_> {
     pub fn run(&mut self) {
         // runs for one frame
         let mut nmi_sent = false;
@@ -119,24 +116,21 @@ impl Nes<'_> {
         self.cycles.set(0);
     }
 
-    pub fn draw(&mut self, framebuffer: &mut [u8]) {
+    pub fn framebuffer(&mut self) -> &[u8] {
         // todo: fix this
         unsafe {
-            framebuffer.copy_from_slice(
-                slice::from_raw_parts(
-                    self.ppu.framebuffer().as_ptr() as _,
-                    self.ppu.framebuffer().width() * self.ppu.framebuffer().height() * 4,
-            ));
+            slice::from_raw_parts(
+                self.ppu.framebuffer().as_ptr() as _,
+                self.ppu.framebuffer().width() * self.ppu.framebuffer().height() * 4,
+            )
         }
     }
 
     pub fn play_audio(&mut self, buf: &mut [i16]) {
         self.apu.tick(buf)
     }
-}
 
-impl<'a> Nes<'a> {
-    pub fn connect(&mut self, port: usize, controller: &'a mut dyn Controller) {
+    pub fn connect(&mut self, port: usize, controller: C) {
         self.mem.connect_controller(port, controller);
     }
 }

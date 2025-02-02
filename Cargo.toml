@@ -9,3 +9,4 @@ crate-type = ["lib", "cdylib"]
 
 [dependencies]
 gfx = { git = "https://github.com/tavispalmer/gfx.git" }
+sdl3 = "*"

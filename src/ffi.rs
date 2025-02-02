@@ -3,7 +3,7 @@ use std::{ffi::{c_char, c_uint, c_void}, ptr, slice};
 use crate::{retro, Controller, Nes};
 
 // core
-static mut NES: Option<Nes> = None;
+static mut NES: Option<Nes<RetroPad>> = None;
 static mut BUF: [u8; 256*240*4] = [0; 256*240*4];
 
 static mut ENVIRON_CB: retro::environment_t = {
@@ -105,8 +105,6 @@ impl Controller for RetroPad {
     }
 }
 
-static mut CONTROLLER: RetroPad = RetroPad {};
-
 #[no_mangle]
 pub extern "system" fn retro_init() {}
 
@@ -195,7 +193,7 @@ pub extern "system" fn retro_reset() {}
 pub extern "system" fn retro_run() {
     unsafe {
         NES.as_mut().unwrap().run();
-        NES.as_mut().unwrap().draw(&mut BUF);
+        BUF.copy_from_slice(NES.as_mut().unwrap().framebuffer());
         VIDEO_CB(BUF.as_ptr() as _, 256, 240 , 256*4);
         NES.as_mut().unwrap().play_audio(&mut AUDIO_BUF);
         AUDIO_BATCH_CB(AUDIO_BUF.as_ptr(), AUDIO_BUF.len()>>1);
@@ -218,7 +216,7 @@ pub extern "system" fn retro_load_game(info: *const retro::game_info) -> bool {
         );
         NES = Nes::load_from_memory(game);
         if let Some(nes) = NES.as_mut() {
-            nes.connect(0, &mut CONTROLLER);
+            nes.connect(0, RetroPad {});
             true
         } else {
             false

@@ -20,7 +20,7 @@ pub trait Mem {
     }
 }
 
-pub struct Memory<'a> {
+pub struct Memory<C: Controller> {
     mem: Box<[u8]>,
     text: Box<[u8]>,
     
@@ -29,13 +29,13 @@ pub struct Memory<'a> {
 
     // controllers
     c_strobe: bool,
-    c1: Option<&'a mut dyn Controller>,
+    c1: Option<C>,
     c1_index: u8,
-    c2: Option<&'a mut dyn Controller>,
+    c2: Option<C>,
     c2_index: u8,
 }
 
-impl Memory<'_> {
+impl<C: Controller> Memory<C> {
     pub fn new(text: &[u8], apu: NonNull<Apu>, ppu: NonNull<Ppu>) -> Self {
         Self {
             mem: unsafe { Box::new_uninit_slice(0x800).assume_init() },
@@ -53,10 +53,8 @@ impl Memory<'_> {
             c2_index: 0,
         }
     }
-}
 
-impl<'a> Memory<'a> {
-    pub fn connect_controller(&mut self, port: usize, controller: &'a mut dyn Controller) {
+    pub fn connect_controller(&mut self, port: usize, controller: C) {
         match port {
             0 => self.c1 = Some(controller),
             1 => self.c2 = Some(controller),
@@ -65,7 +63,7 @@ impl<'a> Memory<'a> {
     }
 }
 
-impl Mem for Memory<'_> {
+impl<C: Controller> Mem for Memory<C> {
     fn read(&mut self, addr: u16) -> u8 {
         let apu = unsafe { self.apu.as_mut() };
         let ppu = unsafe { self.ppu.as_mut() };

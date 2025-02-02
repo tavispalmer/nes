@@ -1,8 +1,8 @@
 use std::{cell::Cell, ptr::NonNull};
 
-use crate::{mem::Mem, Memory};
+use crate::{mem::Mem, Controller, Memory};
 
-pub struct Cpu<'a> {
+pub struct Cpu<C: Controller> {
     pub pc: u16,
     pub a: u8,
     pub x: u8,
@@ -10,13 +10,13 @@ pub struct Cpu<'a> {
     pub sr: u8,
     pub sp: u8,
 
-    pub mem: NonNull<Memory<'a>>,
+    pub mem: NonNull<Memory<C>>,
 
     pub cycles: NonNull<Cell<usize>>,
 }
 
-impl<'a> Cpu<'a> {
-    pub fn new(mem: NonNull<Memory<'a>>, cycles: NonNull<Cell<usize>>) -> Self {
+impl<C: Controller> Cpu<C> {
+    pub fn new(mem: NonNull<Memory<C>>, cycles: NonNull<Cell<usize>>) -> Self {
         let mut cpu = Self {
             pc: 0,
             a: 0,
@@ -32,9 +32,7 @@ impl<'a> Cpu<'a> {
         unsafe { cpu.cycles.as_ref().set(0) };
         cpu
     }
-}
 
-impl Cpu<'_> {
     #[inline]
     const fn n(&self) -> bool {
         ((self.sr >> 7) & 1) != 0
