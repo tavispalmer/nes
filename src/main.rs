@@ -1,10 +1,10 @@
 use core::slice;
-use std::{cell::Cell, collections::VecDeque, env, ffi::{c_char, c_int, c_void, CString, OsString}, fs, mem::MaybeUninit, process::{self, ExitCode}, ptr::{null, null_mut, NonNull}, thread, time::{Duration, Instant}};
+use std::{cell::Cell, collections::VecDeque, env, ffi::{c_char, c_int, c_void}, fs, mem::MaybeUninit, process::ExitCode, ptr::{self, NonNull}, time::{Duration, Instant}};
 
 use nes::Nes;
-use sdl3::{event::Event, keyboard::Keycode, render::TextureAccess, sys::{audio::{SDL_AudioSpec, SDL_AudioStream, SDL_GetAudioStreamAvailable, SDL_OpenAudioDeviceStream, SDL_PutAudioStreamData, SDL_ResumeAudioStreamDevice, SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, SDL_AUDIO_S16}, events::{SDL_Event, SDL_EventType, SDL_EVENT_KEY_DOWN, SDL_EVENT_KEY_UP, SDL_EVENT_QUIT}, init::{SDL_AppResult, SDL_Init, SDL_APP_CONTINUE, SDL_APP_FAILURE, SDL_APP_SUCCESS, SDL_INIT_AUDIO, SDL_INIT_VIDEO}, keycode::{SDL_Keycode, SDLK_DOWN, SDLK_LEFT, SDLK_RETURN, SDLK_RIGHT, SDLK_RSHIFT, SDLK_UP, SDLK_X, SDLK_Z}, main::{SDL_EnterAppMainCallbacks, SDL_RunApp, SDL_main_func}, pixels::{SDL_PIXELFORMAT_ABGR8888, SDL_PIXELFORMAT_ARGB32, SDL_PIXELFORMAT_ARGB8888, SDL_PIXELFORMAT_BGRA32, SDL_PIXELFORMAT_RGB24, SDL_PIXELFORMAT_RGBA32, SDL_PIXELFORMAT_RGBA8888}, render::{SDL_CreateTexture, SDL_CreateWindowAndRenderer, SDL_DestroyTexture, SDL_GetCurrentRenderOutputSize, SDL_GetRenderOutputSize, SDL_GetRenderScale, SDL_LockTexture, SDL_LockTextureToSurface, SDL_RenderPresent, SDL_RenderTexture, SDL_Renderer, SDL_Texture, SDL_UnlockTexture, SDL_TEXTUREACCESS_STREAMING}, video::{SDL_GetWindowPixelFormat, SDL_Window, SDL_WINDOW_HIGH_PIXEL_DENSITY}}};
+use sdl3::{event::Event, keyboard::Keycode, sys::{audio::*, events::*, init::*, main::*, pixels::*, render::*, video::*}};
 
-struct State {
+struct App {
     // video
     window: *mut SDL_Window,
     renderer: *mut SDL_Renderer,
@@ -34,208 +34,209 @@ enum AppResult<T> {
     Failure,
 }
 
-fn init() -> AppResult<Box<State>> {
-    // check if we have provided an argument
-    let args: Vec<String> = env::args().collect();
-    if args.len() != 2 {
-        return AppResult::Failure;
-    }
-    
-    // controller init
-    let controller_state = Cell::new(ControllerState::new());
-
-    // nes init
-    let game = fs::read(&args[1]).unwrap();
-    let nes = Nes::load_from_memory(&game[..])
-        .unwrap();
-    
-    if !unsafe { SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) } {
-        return AppResult::Failure;
-    }
-
-    let mut state = Box::new(State {
-        window: null_mut(),
-        renderer: null_mut(),
-        texture: null_mut(),
-
-        texture_width: 0,
-        texture_height: 0,
-        nes_width: 256,
-        nes_height: 240,
-        nes_pitch: 256*4,
+impl App {
+    fn init() -> AppResult<Box<Self>> {
+        // check if we have provided an argument
+        let args: Vec<String> = env::args().collect();
+        if args.len() != 2 {
+            return AppResult::Failure;
+        }
         
-        stream: null_mut(),
+        // controller init
+        let controller_state = Cell::new(ControllerState::new());
 
-        nes,
-        controller_state,
-
-        now: VecDeque::with_capacity(2048),
-    });
-
-    let controller = Controller::new(NonNull::new(&raw mut state.controller_state).unwrap());
-    state.nes.connect(0, controller);
-
-    if !unsafe { SDL_CreateWindowAndRenderer(c"nes".as_ptr(), 240*4, 240*3, SDL_WINDOW_HIGH_PIXEL_DENSITY, &mut state.window, &mut state.renderer) } {
-        return AppResult::Failure;
-    }
-
-    let mut w = MaybeUninit::uninit();
-    let mut h = MaybeUninit::uninit();
-    if !unsafe { SDL_GetRenderOutputSize(state.renderer, w.as_mut_ptr(), h.as_mut_ptr()) } {
-        return AppResult::Failure;
-    }
-    let w = unsafe { w.assume_init() };
-    let h = unsafe { h.assume_init() };
-
-    state.texture = unsafe { SDL_CreateTexture(state.renderer, SDL_PIXELFORMAT_BGRA32, SDL_TEXTUREACCESS_STREAMING, w, h) };
-    if state.texture == null_mut() {
-        return AppResult::Failure;
-    }
-    state.texture_width = w as usize;
-    state.texture_height = h as usize;
-
-    // audio init
-    let audio_spec = SDL_AudioSpec {
-        format: SDL_AUDIO_S16,
-        channels: 2,
-        freq: 48000,
-    };
-    state.stream = unsafe { SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &audio_spec, None, null_mut()) };
-    unsafe { SDL_ResumeAudioStreamDevice(state.stream) };
-
-    AppResult::Continue(state)
-}
-
-fn iterate(state: &mut State) -> AppResult<()> {
-    // ensure the latency doesn't get any higher than 64 ms
-    if unsafe { SDL_GetAudioStreamAvailable(state.stream) } < (48000*64*4)/1000 - 798*4 {
-        // debug: get framerate
-        let now = Instant::now();
-        if state.now.len() == 2048 {
-            state.now.pop_front();
+        // nes init
+        let game = fs::read(&args[1]).unwrap();
+        let nes = Nes::load_from_memory(&game[..])
+            .unwrap();
+        
+        if !unsafe { SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO) } {
+            return AppResult::Failure;
         }
-        state.now.push_back(now);
-        // get the average
-        if state.now.len() >= 2 {
-            let mut sum = Duration::ZERO;
-            for i in 1..state.now.len() {
-                sum += state.now[i] - state.now[i-1];
+
+        let mut state = Box::new(Self {
+            window: ptr::null_mut(),
+            renderer: ptr::null_mut(),
+            texture: ptr::null_mut(),
+
+            texture_width: 0,
+            texture_height: 0,
+            nes_width: 256,
+            nes_height: 240,
+            nes_pitch: 256*4,
+            
+            stream: ptr::null_mut(),
+
+            nes,
+            controller_state,
+
+            now: VecDeque::with_capacity(2048),
+        });
+
+        let controller = Controller::new(NonNull::new(&raw mut state.controller_state).unwrap());
+        state.nes.connect(0, controller);
+
+        if !unsafe { SDL_CreateWindowAndRenderer(c"nes".as_ptr(), 240*4, 240*3, SDL_WINDOW_HIGH_PIXEL_DENSITY, &mut state.window, &mut state.renderer) } {
+            return AppResult::Failure;
+        }
+
+        let mut w = MaybeUninit::uninit();
+        let mut h = MaybeUninit::uninit();
+        if !unsafe { SDL_GetRenderOutputSize(state.renderer, w.as_mut_ptr(), h.as_mut_ptr()) } {
+            return AppResult::Failure;
+        }
+        let w = unsafe { w.assume_init() };
+        let h = unsafe { h.assume_init() };
+
+        state.texture = unsafe { SDL_CreateTexture(state.renderer, SDL_PIXELFORMAT_BGRA32, SDL_TEXTUREACCESS_STREAMING, w, h) };
+        if state.texture == ptr::null_mut() {
+            return AppResult::Failure;
+        }
+        state.texture_width = w as usize;
+        state.texture_height = h as usize;
+
+        // audio init
+        let audio_spec = SDL_AudioSpec {
+            format: SDL_AUDIO_S16,
+            channels: 2,
+            freq: 48000,
+        };
+        state.stream = unsafe { SDL_OpenAudioDeviceStream(SDL_AUDIO_DEVICE_DEFAULT_PLAYBACK, &audio_spec, None, ptr::null_mut()) };
+        unsafe { SDL_ResumeAudioStreamDevice(state.stream) };
+
+        AppResult::Continue(state)
+    }
+
+    fn iterate(&mut self) -> AppResult<()> {
+        // ensure the latency isn't above 64 ms
+        if unsafe { SDL_GetAudioStreamAvailable(self.stream) } < (48000*64*4)/1000 {
+            // debug: get framerate
+            let now = Instant::now();
+            if self.now.len() == 2048 {
+                self.now.pop_front();
             }
-            let avg = 1.0 / (sum / state.now.len() as u32).as_secs_f64();
-            eprintln!("framerate: {}", avg);
-        }
-
-        state.nes.run();
-
-        // queue up new audio
-        let mut buf = [0; 798*2];
-        state.nes.play_audio(&mut buf);
-        unsafe { SDL_PutAudioStreamData(state.stream, &buf as *const [i16] as _, (buf.len()*size_of::<i16>()) as _) };
-
-        let src = state.nes.framebuffer();
-        let mut pixels = MaybeUninit::uninit();
-        let mut pitch = MaybeUninit::uninit();
-        if unsafe { SDL_LockTexture(state.texture, null(), pixels.as_mut_ptr(), pitch.as_mut_ptr()) } {
-            let pixels = unsafe { pixels.assume_init() } as *mut u8;
-            let pitch = unsafe { pitch.assume_init() } as usize;
-
-            // sdl doesn't have nearest neighbor filtering...
-            // do it ourselves
-            let dst = unsafe { slice::from_raw_parts_mut(
-                pixels, state.texture_height * pitch
-            ) };
-            for y in 0..state.texture_height {
-                let dst_y = y*pitch;
-                let src_y = (y*state.nes_height/state.texture_height)*state.nes_pitch;
-                for x in 0..state.texture_width {
-                    // could be more optimizied?
-                    let dst_x = x<<2;
-                    let src_x = (x*state.nes_width/state.texture_width)<<2;
-                    dst[dst_y+dst_x] = src[src_y+src_x];
-                    dst[dst_y+dst_x+1] = src[src_y+src_x+1];
-                    dst[dst_y+dst_x+2] = src[src_y+src_x+2];
-                    dst[dst_y+dst_x+3] = src[src_y+src_x+3];
+            self.now.push_back(now);
+            // get the average
+            if self.now.len() >= 2 {
+                let mut sum = Duration::ZERO;
+                for i in 1..self.now.len() {
+                    sum += self.now[i] - self.now[i-1];
                 }
+                let avg = 1.0 / (sum / self.now.len() as u32).as_secs_f64();
+                eprintln!("framerate: {}", avg);
             }
-            unsafe { SDL_UnlockTexture(state.texture) };
+
+            self.nes.run();
+
+            // queue up new audio
+            let mut buf = [0; 798*2];
+            self.nes.play_audio(&mut buf);
+            unsafe { SDL_PutAudioStreamData(self.stream, &buf as *const [i16] as _, (buf.len()*size_of::<i16>()) as _) };
+
+            let src = self.nes.framebuffer();
+            let mut pixels = MaybeUninit::uninit();
+            let mut pitch = MaybeUninit::uninit();
+            if unsafe { SDL_LockTexture(self.texture, ptr::null(), pixels.as_mut_ptr(), pitch.as_mut_ptr()) } {
+                let pixels = unsafe { pixels.assume_init() } as *mut u8;
+                let pitch = unsafe { pitch.assume_init() } as usize;
+
+                // sdl doesn't have nearest neighbor filtering...
+                // do it ourselves
+                let dst = unsafe { slice::from_raw_parts_mut(
+                    pixels, self.texture_height * pitch
+                ) };
+                for y in 0..self.texture_height {
+                    let dst_y = y*pitch;
+                    let src_y = (y*self.nes_height/self.texture_height)*self.nes_pitch;
+                    for x in 0..self.texture_width {
+                        // could be more optimizied?
+                        let dst_x = x<<2;
+                        let src_x = (x*self.nes_width/self.texture_width)<<2;
+                        dst[dst_y+dst_x] = src[src_y+src_x];
+                        dst[dst_y+dst_x+1] = src[src_y+src_x+1];
+                        dst[dst_y+dst_x+2] = src[src_y+src_x+2];
+                        dst[dst_y+dst_x+3] = src[src_y+src_x+3];
+                    }
+                }
+                unsafe { SDL_UnlockTexture(self.texture) };
+            }
         }
+
+        unsafe { SDL_RenderTexture(self.renderer, self.texture, ptr::null(), ptr::null()) };
+
+        unsafe { SDL_RenderPresent(self.renderer) };
+
+        AppResult::Continue(())
     }
 
-    unsafe { SDL_RenderTexture(state.renderer, state.texture, null(), null()) };
+    fn event(&mut self, event: &mut Event) -> AppResult<()> {
+        // looks like event is called on the main thread (on macos)
+        let mut controller_state = self.controller_state.get();
 
-    unsafe { SDL_RenderPresent(state.renderer) };
+        match event {
+            Event::Quit {..} => return AppResult::Success,
 
-    AppResult::Continue(())
-}
+            Event::KeyDown { keycode: Some(Keycode::X), .. } => {
+                controller_state.set_a(true);
+            },
+            Event::KeyDown { keycode: Some(Keycode::Z), .. } => {
+                controller_state.set_b(true);
+            },
+            Event::KeyDown { keycode: Some(Keycode::RShift), .. } => {
+                controller_state.set_select(true);
+            },
+            Event::KeyDown { keycode: Some(Keycode::Return), .. } => {
+                controller_state.set_start(true);
+            },
+            Event::KeyDown { keycode: Some(Keycode::Up), .. } => {
+                controller_state.set_up(true);
+            },
+            Event::KeyDown { keycode: Some(Keycode::Down), .. } => {
+                controller_state.set_down(true);
+            },
+            Event::KeyDown { keycode: Some(Keycode::Left), .. } => {
+                controller_state.set_left(true);
+            },
+            Event::KeyDown { keycode: Some(Keycode::Right), .. } => {
+                controller_state.set_right(true);
+            },
 
-fn event(state: &mut State, event: &mut Event) -> AppResult<()> {
-    // looks like event is called on the main thread (on macos)
-    let mut controller_state = state.controller_state.get();
+            Event::KeyUp { keycode: Some(Keycode::X), .. } => {
+                controller_state.set_a(false);
+                self.controller_state.set(controller_state);
+            },
+            Event::KeyUp { keycode: Some(Keycode::Z), .. } => {
+                controller_state.set_b(false);
+            },
+            Event::KeyUp { keycode: Some(Keycode::RShift), .. } => {
+                controller_state.set_select(false);
+            },
+            Event::KeyUp { keycode: Some(Keycode::Return), .. } => {
+                controller_state.set_start(false);
+            },
+            Event::KeyUp { keycode: Some(Keycode::Up), .. } => {
+                controller_state.set_up(false);
+            },
+            Event::KeyUp { keycode: Some(Keycode::Down), .. } => {
+                controller_state.set_down(false);
+            },
+            Event::KeyUp { keycode: Some(Keycode::Left), .. } => {
+                controller_state.set_left(false);
+            },
+            Event::KeyUp { keycode: Some(Keycode::Right), .. } => {
+                controller_state.set_right(false);
+            },
 
-    match event {
-        Event::Quit {..} => return AppResult::Success,
+            _ => {},
+        };
 
-        Event::KeyDown { keycode: Some(Keycode::X), .. } => {
-            controller_state.set_a(true);
-        },
-        Event::KeyDown { keycode: Some(Keycode::Z), .. } => {
-            controller_state.set_b(true);
-        },
-        Event::KeyDown { keycode: Some(Keycode::RShift), .. } => {
-            controller_state.set_select(true);
-        },
-        Event::KeyDown { keycode: Some(Keycode::Return), .. } => {
-            controller_state.set_start(true);
-        },
-        Event::KeyDown { keycode: Some(Keycode::Up), .. } => {
-            controller_state.set_up(true);
-        },
-        Event::KeyDown { keycode: Some(Keycode::Down), .. } => {
-            controller_state.set_down(true);
-        },
-        Event::KeyDown { keycode: Some(Keycode::Left), .. } => {
-            controller_state.set_left(true);
-        },
-        Event::KeyDown { keycode: Some(Keycode::Right), .. } => {
-            controller_state.set_right(true);
-        },
+        self.controller_state.set(controller_state);
+        AppResult::Continue(())
+    }
 
-        Event::KeyUp { keycode: Some(Keycode::X), .. } => {
-            controller_state.set_a(false);
-            state.controller_state.set(controller_state);
-        },
-        Event::KeyUp { keycode: Some(Keycode::Z), .. } => {
-            controller_state.set_b(false);
-        },
-        Event::KeyUp { keycode: Some(Keycode::RShift), .. } => {
-            controller_state.set_select(false);
-        },
-        Event::KeyUp { keycode: Some(Keycode::Return), .. } => {
-            controller_state.set_start(false);
-        },
-        Event::KeyUp { keycode: Some(Keycode::Up), .. } => {
-            controller_state.set_up(false);
-        },
-        Event::KeyUp { keycode: Some(Keycode::Down), .. } => {
-            controller_state.set_down(false);
-        },
-        Event::KeyUp { keycode: Some(Keycode::Left), .. } => {
-            controller_state.set_left(false);
-        },
-        Event::KeyUp { keycode: Some(Keycode::Right), .. } => {
-            controller_state.set_right(false);
-        },
-
-        _ => {},
-    };
-
-    state.controller_state.set(controller_state);
-    AppResult::Continue(())
-}
-
-fn quit(state: Option<Box<State>>, _result: AppResult<()>) {
-    if let Some(state) = state {
-        unsafe { SDL_DestroyTexture(state.texture) };
+    fn quit(app: Box<Self>, result: AppResult<()>) {
+        unsafe { SDL_DestroyTexture(app.texture) };
+        unsafe { SDL_DestroyAudioStream(app.stream) };
     }
 }
 
@@ -411,17 +412,17 @@ extern "C" fn SDL_AppInit(appstate: *mut *mut c_void, _argc: c_int, _argv: *mut 
     // are called with a valid state, while also not requiring
     // the user to return a state if the program ends immediately
     // on SDL_AppInit
-    match init() {
-        AppResult::Continue(state) => {
-            unsafe { (*(appstate as *mut MaybeUninit<Option<Box<State>>>)).write(Some(state)) };
+    match App::init() {
+        AppResult::Continue(app) => {
+            unsafe { (*(appstate as *mut MaybeUninit<Option<Box<App>>>)).write(Some(app)) };
             SDL_APP_CONTINUE
         },
         AppResult::Success => {
-            unsafe { (*(appstate as *mut MaybeUninit<Option<Box<State>>>)).write(None) };
+            unsafe { (*(appstate as *mut MaybeUninit<Option<Box<App>>>)).write(None) };
             SDL_APP_SUCCESS
         },
         AppResult::Failure => {
-            unsafe { (*(appstate as *mut MaybeUninit<Option<Box<State>>>)).write(None) };
+            unsafe { (*(appstate as *mut MaybeUninit<Option<Box<App>>>)).write(None) };
             SDL_APP_FAILURE
         }
     }
@@ -429,10 +430,10 @@ extern "C" fn SDL_AppInit(appstate: *mut *mut c_void, _argc: c_int, _argv: *mut 
 
 #[allow(non_snake_case)]
 extern "C" fn SDL_AppIterate(appstate: *mut c_void) -> SDL_AppResult {
-    let state = unsafe { (*(&raw const appstate as *mut Box<State>)).as_mut() };
+    let app: &mut App = unsafe { (*(&raw const appstate as *mut Box<App>)).as_mut() };
 
-    match iterate(state) {
-        AppResult::Continue(..) => SDL_APP_CONTINUE,
+    match app.iterate() {
+        AppResult::Continue(()) => SDL_APP_CONTINUE,
         AppResult::Success => SDL_APP_SUCCESS,
         AppResult::Failure => SDL_APP_FAILURE,
     }
@@ -440,11 +441,11 @@ extern "C" fn SDL_AppIterate(appstate: *mut c_void) -> SDL_AppResult {
 
 #[allow(non_snake_case)]
 extern "C" fn SDL_AppEvent(appstate: *mut c_void, e: *mut SDL_Event) -> SDL_AppResult {
-    let state = unsafe { (*(&raw const appstate as *mut Box<State>)).as_mut() };
+    let app = unsafe { (*(&raw const appstate as *mut Box<App>)).as_mut() };
     let mut e = Event::from_ll(unsafe { *e });
 
-    match event(state, &mut e) {
-        AppResult::Continue(..) => SDL_APP_CONTINUE,
+    match app.event(&mut e) {
+        AppResult::Continue(()) => SDL_APP_CONTINUE,
         AppResult::Success => SDL_APP_SUCCESS,
         AppResult::Failure => SDL_APP_FAILURE,
     }
@@ -452,7 +453,7 @@ extern "C" fn SDL_AppEvent(appstate: *mut c_void, e: *mut SDL_Event) -> SDL_AppR
 
 #[allow(non_snake_case)]
 extern "C" fn SDL_AppQuit(appstate: *mut c_void, result: SDL_AppResult) {
-    let state = unsafe { std::mem::take(&mut *(&raw const appstate as *mut Option<Box<State>>)) };
+    let app = unsafe { std::mem::take(&mut *(&raw const appstate as *mut Option<Box<App>>)) };
     let result = match result {
         SDL_APP_CONTINUE => AppResult::Continue(()),
         SDL_APP_SUCCESS => AppResult::Success,
@@ -460,16 +461,18 @@ extern "C" fn SDL_AppQuit(appstate: *mut c_void, result: SDL_AppResult) {
         _ => unreachable!(),
     };
 
-    quit(state, result)
+    if let Some(app) = app {
+        App::quit(app, result);
+    }
 }
 
 #[allow(non_snake_case)]
-unsafe extern "C" fn SDL_main(argc: c_int, argv: *mut *mut c_char) -> c_int {
-    SDL_EnterAppMainCallbacks(argc, argv, Some(SDL_AppInit), Some(SDL_AppIterate), Some(SDL_AppEvent), Some(SDL_AppQuit))
+extern "C" fn SDL_main(argc: c_int, argv: *mut *mut c_char) -> c_int {
+    unsafe { SDL_EnterAppMainCallbacks(argc, argv, Some(SDL_AppInit), Some(SDL_AppIterate), Some(SDL_AppEvent), Some(SDL_AppQuit)) }
 }
 
 fn main() -> ExitCode {
     // we have access to args through std::env::args(),
     // so no need to pass them along here
-    ExitCode::from(unsafe { SDL_RunApp(0, null_mut(), Some(SDL_main), null_mut()) } as u8)
+    ExitCode::from(unsafe { SDL_RunApp(0, ptr::null_mut(), Some(SDL_main), ptr::null_mut()) } as u8)
 }

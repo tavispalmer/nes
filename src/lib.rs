@@ -117,13 +117,7 @@ impl<C: Controller> Nes<C> {
     }
 
     pub fn framebuffer(&mut self) -> &[u8] {
-        // todo: fix this
-        unsafe {
-            slice::from_raw_parts(
-                self.ppu.framebuffer().as_ptr() as _,
-                self.ppu.framebuffer().width() * self.ppu.framebuffer().height() * 4,
-            )
-        }
+        self.ppu.framebuffer().as_slice()
     }
 
     pub fn play_audio(&mut self, buf: &mut [i16]) {

@@ -11,7 +11,7 @@ checksum = "8f68f53c83ab957f72c32642f3868eec03eb974d1fb82e453128456482613d36"
 [[package]]
 name = "gfx"
 version = "0.1.0"
-source = "git+https://github.com/tavispalmer/gfx.git#eec84b44224a60a1141529bfa783e68a24607a62"
+source = "git+https://github.com/tavispalmer/gfx.git#0a8de9b317847a469514c00b572a39c6f26888b5"
 
 [[package]]
 name = "lazy_static"
@@ -47,6 +47,6 @@ dependencies = [
 
 [[package]]
 name = "sdl3-sys"
-version = "0.4.2+SDL3-3.2.0"
+version = "0.4.3+SDL3-3.2.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "62e56dc3a403bec711689a8ddedabc1e6fd3faa20b29088895f0d2081fc936fb"
+checksum = "fb7ecf5e5f416b2e6408ebe1825ded6bdcac3b8c79e429aada3c79efc675e80d"

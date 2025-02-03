@@ -155,30 +155,26 @@ impl Ppu {
         for i in 0x0..0x3c0 {
             let tile = self.mem[(bg<<10)|i];
             let pal = (self.mem[(bg<<10)|0x3c0|((i>>4)&0x38)|((i>>2)&0x7)]>>(((i>>4)&0x4)|(i&0x2)))&0x3;
-            let u0 = ((tile&0xf)<<3) as usize;
-            let v0 = ((tile>>4)<<3) as usize;
-            let u1 = (((tile&0xf)+1)<<3) as usize;
-            let v1 = (((tile>>4)+1)<<3) as usize;
+            let u = ((tile&0xf)<<3) as usize;
+            let v = ((tile>>4)<<3) as usize;
             let x = (((i&0x1f)<<3) as isize) - (self.ppuscroll_x as isize) + ((((self.ppuctrl & 0x01) ^ ((bg & 0x01) as u8)) as isize) << 8);
             let y = (((i>>5)<<3) as isize) - (self.ppuscroll_y as isize);
-            self.framebuffer.draw_paletted(&self.chr1, &self.palette, pal as usize, u0, v0, u1, v1, x, y);
+            self.framebuffer.draw_paletted(&self.chr1, x, y, u, v, 8, 8, &self.palette, pal as usize, false, false);
         }
     }
 
     fn draw_sprite(&mut self, spr: usize) {
-        let y = self.oam[(spr<<2)|0].wrapping_add(1);
+        let y = self.oam[(spr<<2)|0] as isize + 1;
         let tile = self.oam[(spr<<2)|1];
         let pal = self.oam[(spr<<2)|2] & 0x03;
-        let flip_h = (self.oam[(spr<<2)|2] & 0x40) != 0;
-        let flip_v = (self.oam[(spr<<2)|2] & 0x80) != 0;
-        let x = self.oam[(spr<<2)|3];
+        let flip_x = (self.oam[(spr<<2)|2] & 0x40) != 0;
+        let flip_y = (self.oam[(spr<<2)|2] & 0x80) != 0;
+        let x = self.oam[(spr<<2)|3] as isize;
 
-        let u0 = (((tile as usize)&0xf)+(flip_h as usize))<<3;
-        let v0 = (((tile as usize)>>4)+(flip_v as usize))<<3;
-        let u1 = (((tile as usize)&0xf)+(!flip_h as usize))<<3;
-        let v1 = (((tile as usize)>>4)+(!flip_v as usize))<<3;
+        let u = ((tile as usize)&0xf)<<3;
+        let v = ((tile as usize)>>4)<<3;
 
-        self.framebuffer.draw_paletted(&self.chr0, &self.palette, 4+pal as usize, u0, v0, u1, v1, x as isize, y as isize);
+        self.framebuffer.draw_paletted(&self.chr0, x, y, u, v, 8, 8, &self.palette, 4+pal as usize, flip_x, flip_y);
     }
 
     pub fn draw(&mut self) {
