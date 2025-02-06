@@ -417,8 +417,8 @@ pub struct CNSFCore {
     pub nROMBankCount: i32,
     pub nROMMaxSize: i32,
 
-    pub ReadMemory: [(u64, u64); 0x10],
-    pub WriteMemory: [(u64, u64); 0x10],
+    pub ReadMemory: [(usize, usize); 0x10],
+    pub WriteMemory: [(usize, usize); 0x10],
 
     pub regA: u8,
     pub regX: u8,
