@@ -396,6 +396,18 @@ pub struct CFME07Wave {
 
 // NSFCore
 
+#[cfg(target_env = "msvc")]
+type ReadProc = *const c_void;
+#[cfg(target_env = "msvc")]
+type WriteProc = *const c_void;
+
+#[cfg(not(target_env = "msvc"))]
+#[repr(C)]
+struct ReadProc(usize, usize);
+#[cfg(not(target_env = "msvc"))]
+#[repr(C)]
+struct WriteProc(usize, usize);
+
 #[repr(C)]
 pub struct CNSFCore {
     pub bMemoryOK: u8,
@@ -417,8 +429,8 @@ pub struct CNSFCore {
     pub nROMBankCount: i32,
     pub nROMMaxSize: i32,
 
-    pub ReadMemory: [(usize, usize); 0x10],
-    pub WriteMemory: [(usize, usize); 0x10],
+    pub ReadMemory: [ReadProc; 0x10],
+    pub WriteMemory: [WriteProc; 0x10],
 
     pub regA: u8,
     pub regX: u8,
